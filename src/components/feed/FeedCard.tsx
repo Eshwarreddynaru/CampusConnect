@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { cn, formatRelativeTime, REPORT_CATEGORIES } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -174,11 +173,10 @@ export function FeedCard({
                 {/* Image Section */}
                 {images.length > 0 && (
                     <div className="relative aspect-[4/3] bg-muted">
-                        <Image
+                        <img
                             src={images[imageIndex] || '/placeholder.jpg'}
                             alt={title}
-                            fill
-                            className="object-cover"
+                            className="absolute inset-0 w-full h-full object-cover"
                         />
 
                         {/* Image pagination dots */}

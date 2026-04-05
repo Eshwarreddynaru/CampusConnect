@@ -36,7 +36,7 @@ import {
     Download,
     Filter,
 } from 'lucide-react';
-import Image from 'next/image';
+
 
 interface Report {
     id: string;
@@ -367,11 +367,10 @@ export default function AdminReportsPage() {
                             {/* Images */}
                             {selectedReport.images && selectedReport.images.length > 0 && (
                                 <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100">
-                                    <Image
+                                    <img
                                         src={selectedReport.images[0]}
                                         alt={selectedReport.title}
-                                        fill
-                                        className="object-cover"
+                                        className="absolute inset-0 w-full h-full object-cover"
                                     />
                                 </div>
                             )}
