@@ -105,9 +105,13 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'Match not found' }, { status: 404 });
         }
 
+        // Supabase types infer joined relations as arrays, but .single() returns objects at runtime
+        const lostReport = match.lost_report as unknown as { user_id: string } | null;
+        const foundReport = match.found_report as unknown as { user_id: string } | null;
+
         const isInvolved = 
-            match.lost_report?.user_id === user.id || 
-            match.found_report?.user_id === user.id;
+            lostReport?.user_id === user.id || 
+            foundReport?.user_id === user.id;
 
         if (!isInvolved) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
