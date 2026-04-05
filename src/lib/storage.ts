@@ -1,42 +1,30 @@
-import { createClient } from '@/lib/supabase/client';
-
-const BUCKET_NAME = 'report-images';
-
 /**
- * Upload an image file to Supabase Storage and return the public URL.
- * Falls back to base64 data URL if storage upload fails.
+ * Upload an image file via the server-side API route.
+ * This works in all environments including Median.co WebViews
+ * because the actual Supabase Storage upload happens on the server.
  */
-export async function uploadImage(file: File, userId: string): Promise<string> {
-    const supabase = createClient();
+export async function uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
 
-    // Create a unique file path
-    const fileExt = file.name.split('.').pop() || 'jpg';
-    const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+    const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+    });
 
-    const { data, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(fileName, file, {
-            cacheControl: '31536000', // 1 year cache
-            upsert: false,
-        });
-
-    if (error) {
-        console.error('Storage upload error:', error);
-        throw new Error(`Failed to upload image: ${error.message}`);
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(data.error || 'Failed to upload image');
     }
 
-    // Get the public URL
-    const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(data.path);
-
-    return urlData.publicUrl;
+    const data = await response.json();
+    return data.url;
 }
 
 /**
  * Upload multiple image files and return their public URLs.
  */
-export async function uploadImages(files: File[], userId: string): Promise<string[]> {
-    const uploadPromises = files.map(file => uploadImage(file, userId));
+export async function uploadImages(files: File[]): Promise<string[]> {
+    const uploadPromises = files.map(file => uploadImage(file));
     return Promise.all(uploadPromises);
 }

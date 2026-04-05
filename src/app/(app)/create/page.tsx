@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { generateReportCode } from '@/lib/utils';
-import { uploadImages } from '@/lib/storage';
+import { uploadImage } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,30 +68,34 @@ export default function CreateReportPage() {
     const [category, setCategory] = useState<string | null>(null);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-    const [imageFiles, setImageFiles] = useState<File[]>([]);
+    const [imageUrls, setImageUrls] = useState<string[]>([]);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [locationDescription, setLocationDescription] = useState('');
     const [selectedCoordinates, setSelectedCoordinates] = useState<{ lat: number; lng: number } | null>(null);
 
-    const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
-        if (!files) return;
+        if (!files || files.length === 0) return;
 
-        Array.from(files).forEach(file => {
-            // Use createObjectURL for instant preview (works in WebViews)
-            const previewUrl = URL.createObjectURL(file);
-            setImagePreviews(prev => [...prev, previewUrl]);
-            setImageFiles(prev => [...prev, file]);
-        });
+        setIsUploadingImage(true);
+
+        for (const file of Array.from(files)) {
+            try {
+                const url = await uploadImage(file);
+                setImageUrls(prev => [...prev, url]);
+            } catch (err) {
+                console.error('Image upload failed:', err);
+                toast.error('Failed to upload image. Please try again.');
+            }
+        }
+
+        setIsUploadingImage(false);
+        // Reset the input so the same file can be re-selected
+        e.target.value = '';
     }, []);
 
     const removeImage = (index: number) => {
-        setImagePreviews(prev => {
-            // Revoke the object URL to free memory
-            URL.revokeObjectURL(prev[index]);
-            return prev.filter((_, i) => i !== index);
-        });
-        setImageFiles(prev => prev.filter((_, i) => i !== index));
+        setImageUrls(prev => prev.filter((_, i) => i !== index));
     };
 
     const canProceed = () => {
@@ -124,18 +128,6 @@ export default function CreateReportPage() {
                 user.email?.split('@')[0] ||
                 'Unknown';
 
-            // Upload images to Supabase Storage
-            let imageUrls: string[] = [];
-            if (imageFiles.length > 0) {
-                try {
-                    imageUrls = await uploadImages(imageFiles, user.id);
-                } catch (uploadErr) {
-                    console.error('Image upload failed:', uploadErr);
-                    toast.error('Failed to upload images. Please try again.');
-                    return;
-                }
-            }
-
             // Retry loop to handle the rare case of a duplicate report code
             const MAX_RETRIES = 3;
             let lastError: { message: string } | null = null;
@@ -152,7 +144,7 @@ export default function CreateReportPage() {
                     category,
                     report_code: reportCode,
                     register_number: registerNumber,
-                    images: imageUrls, // Public URLs from Supabase Storage
+                    images: imageUrls, // Public HTTPS URLs from Supabase Storage
                     location: locationDescription.trim() || null,
                     latitude: selectedCoordinates?.lat || null,
                     longitude: selectedCoordinates?.lng || null,
@@ -350,7 +342,7 @@ export default function CreateReportPage() {
                         <div className="space-y-2">
                             <Label>Photos</Label>
                             <div className="grid grid-cols-3 gap-3">
-                                {imagePreviews.map((img, idx) => (
+                                {imageUrls.map((img, idx) => (
                                     <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
                                         <img src={img} alt="" className="w-full h-full object-cover" />
                                         <button
@@ -361,7 +353,7 @@ export default function CreateReportPage() {
                                         </button>
                                     </div>
                                 ))}
-                                {imagePreviews.length < 4 && (
+                                {imageUrls.length < 4 && !isUploadingImage && (
                                     <label className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 transition-colors">
                                         <Camera className="w-6 h-6 text-muted-foreground" />
                                         <span className="text-xs text-muted-foreground">Add Photo</span>
@@ -373,6 +365,12 @@ export default function CreateReportPage() {
                                             onChange={handleImageUpload}
                                         />
                                     </label>
+                                )}
+                                {isUploadingImage && (
+                                    <div className="aspect-square rounded-lg border-2 border-dashed border-primary/50 flex flex-col items-center justify-center gap-2 bg-primary/5">
+                                        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                                        <span className="text-xs text-primary">Uploading...</span>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -426,9 +424,9 @@ export default function CreateReportPage() {
                         <Card>
                             <CardContent className="p-6">
                                 <div className="flex items-center gap-4 mb-4">
-                                    {imagePreviews.length > 0 ? (
+                                    {imageUrls.length > 0 ? (
                                         <img
-                                            src={imagePreviews[0]}
+                                            src={imageUrls[0]}
                                             alt={title}
                                             className="w-20 h-20 rounded-xl object-cover"
                                         />
