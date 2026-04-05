@@ -144,6 +144,11 @@ export default function MyClaimsPage() {
                     ))
                 ) : claims.length > 0 ? (
                     claims.map((claim) => {
+                        // Check if report data is available (might be null due to RLS)
+                        if (!claim.report) {
+                            return null; // Skip claims with inaccessible reports
+                        }
+                        
                         const isClaimant = currentUserId === claim.claimer_id;
                         const otherPerson = isClaimant
                             ? claim.report.register_number

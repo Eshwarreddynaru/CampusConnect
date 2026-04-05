@@ -171,39 +171,25 @@ export default function FeedPage() {
         try {
             const supabase = createClient();
 
-            // Fetch user and reports IN PARALLEL (saves ~200ms)
-            const [userRes, reportsRes] = await Promise.all([
-                supabase.auth.getUser(),
-                supabase
-                    .from('reports')
-                    .select('id, type, title, description, category, report_code, register_number, images, location, status, created_at, user_id')
-                    .order('created_at', { ascending: false })
-                    .limit(200),
-            ]);
-
-            // Debug logging - remove after fixing
-            console.log('[Feed Debug] User:', userRes.data.user?.id);
-            console.log('[Feed Debug] Reports response:', {
-                data: reportsRes.data?.length,
-                error: reportsRes.error,
-                status: reportsRes.status,
-                statusText: reportsRes.statusText,
-            });
-            if (reportsRes.data && reportsRes.data.length > 0) {
-                console.log('[Feed Debug] First report:', reportsRes.data[0]);
+            // Get user first
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setCurrentUserId(user.id);
             }
 
-            if (userRes.data.user) {
-                setCurrentUserId(userRes.data.user.id);
-            }
+            // Fetch reports directly from Supabase (fallback to original method)
+            const { data: reportsData, error: reportsError } = await supabase
+                .from('reports')
+                .select('id, type, title, description, category, report_code, register_number, images, location, status, created_at, user_id')
+                .order('created_at', { ascending: false });
 
-            if (reportsRes.error) {
-                console.error('Error fetching reports:', reportsRes.error);
-                setFetchError(reportsRes.error.message || 'Could not connect to the database.');
+            if (reportsError) {
+                console.error('Error fetching reports:', reportsError);
+                setFetchError(reportsError.message || 'Could not connect to the database.');
                 return;
             }
 
-            setReports(reportsRes.data || []);
+            setReports(reportsData || []);
             setFetchError(null);
         } catch (error) {
             console.error('Error:', error);

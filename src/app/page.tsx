@@ -32,11 +32,20 @@ export default function LandingPage() {
                 How it Works
               </Link>
               <Link href="/auth/login">
-                <Button variant="ghost" size="sm" className="text-gray-600">Login</Button>
+                <Button variant="ghost" size="sm" className="text-gray-600">
+                  <Search className="w-3.5 h-3.5 mr-1.5" />
+                  Student
+                </Button>
+              </Link>
+              <Link href="/admin/login">
+                <Button variant="ghost" size="sm" className="text-gray-600">
+                  <Shield className="w-3.5 h-3.5 mr-1.5" />
+                  Admin
+                </Button>
               </Link>
               <Link href="/auth/register">
                 <Button size="sm" className="text-white" style={{ background: '#1a5c6b' }}>
-                  Get Started
+                  Register
                 </Button>
               </Link>
             </nav>
@@ -67,18 +76,37 @@ export default function LandingPage() {
             Report, search, and recover your lost belongings at Kalasalingam University. Secure, private, and easy to use.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link href="/auth/register">
-              <Button size="lg" className="text-white px-8 py-5 rounded-lg text-sm font-semibold" style={{ background: '#1a5c6b' }}>
-                Get Started
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </Link>
-            <Link href="/auth/login">
-              <Button size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20 px-8 py-5 rounded-lg text-sm">
-                Login
-              </Button>
-            </Link>
+          {/* Login Options */}
+          <div className="flex flex-col items-center justify-center gap-4 mb-6">
+            <p className="text-white/80 text-sm font-medium">Choose your login type:</p>
+            
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md">
+              {/* Student Login */}
+              <Link href="/auth/login" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full text-white px-8 py-5 rounded-lg text-sm font-semibold shadow-lg hover:shadow-xl transition-all" style={{ background: '#1a5c6b' }}>
+                  <Search className="w-4 h-4 mr-2" />
+                  Student Login
+                </Button>
+              </Link>
+
+              {/* Admin Login */}
+              <Link href="/admin/login" className="w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="w-full bg-white/10 border-white/30 text-white hover:bg-white/20 px-8 py-5 rounded-lg text-sm font-semibold backdrop-blur-sm">
+                  <Shield className="w-4 h-4 mr-2" />
+                  Admin Login
+                </Button>
+              </Link>
+            </div>
+
+            {/* Register Link */}
+            <div className="text-center mt-2">
+              <p className="text-white/70 text-sm">
+                New student?{' '}
+                <Link href="/auth/register" className="text-white font-semibold underline hover:text-white/90">
+                  Create Account
+                </Link>
+              </p>
+            </div>
           </div>
 
           {/* Simple Stats */}

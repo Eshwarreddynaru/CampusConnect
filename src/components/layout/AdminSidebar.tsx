@@ -16,6 +16,7 @@ import {
     Menu,
     X,
     Bot,
+    Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
@@ -23,6 +24,7 @@ import { useState, useEffect } from 'react';
 
 const adminNavItems = [
     { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/admin/lost-found', label: 'Lost & Found', icon: Package },
     { href: '/admin/reports', label: 'All Reports', icon: FileText },
     { href: '/admin/claims', label: 'All Claims', icon: HandHelping },
     { href: '/admin/chats', label: 'All Chats', icon: MessageSquare },
