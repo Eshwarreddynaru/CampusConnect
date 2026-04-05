@@ -12,12 +12,13 @@ export async function uploadImage(file: File): Promise<string> {
         body: formData,
     });
 
+    const data = await response.json().catch(() => ({ error: `Upload failed with status ${response.status}` }));
+
     if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: 'Upload failed' }));
-        throw new Error(data.error || 'Failed to upload image');
+        console.error('Upload failed:', response.status, data);
+        throw new Error(data.error || `Upload failed (${response.status})`);
     }
 
-    const data = await response.json();
     return data.url;
 }
 

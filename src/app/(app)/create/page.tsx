@@ -83,9 +83,9 @@ export default function CreateReportPage() {
             try {
                 const url = await uploadImage(file);
                 setImageUrls(prev => [...prev, url]);
-            } catch (err) {
+            } catch (err: any) {
                 console.error('Image upload failed:', err);
-                toast.error('Failed to upload image. Please try again.');
+                toast.error(err?.message || 'Failed to upload image. Please try again.');
             }
         }
 
