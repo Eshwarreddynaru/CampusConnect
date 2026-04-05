@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { generateReportCode } from '@/lib/utils';
+import { uploadImages } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,7 +68,8 @@ export default function CreateReportPage() {
     const [category, setCategory] = useState<string | null>(null);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [images, setImages] = useState<string[]>([]);
+    const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+    const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [locationDescription, setLocationDescription] = useState('');
     const [selectedCoordinates, setSelectedCoordinates] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -76,18 +78,20 @@ export default function CreateReportPage() {
         if (!files) return;
 
         Array.from(files).forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (event.target?.result) {
-                    setImages(prev => [...prev, event.target!.result as string]);
-                }
-            };
-            reader.readAsDataURL(file);
+            // Use createObjectURL for instant preview (works in WebViews)
+            const previewUrl = URL.createObjectURL(file);
+            setImagePreviews(prev => [...prev, previewUrl]);
+            setImageFiles(prev => [...prev, file]);
         });
     }, []);
 
     const removeImage = (index: number) => {
-        setImages(prev => prev.filter((_, i) => i !== index));
+        setImagePreviews(prev => {
+            // Revoke the object URL to free memory
+            URL.revokeObjectURL(prev[index]);
+            return prev.filter((_, i) => i !== index);
+        });
+        setImageFiles(prev => prev.filter((_, i) => i !== index));
     };
 
     const canProceed = () => {
@@ -120,6 +124,18 @@ export default function CreateReportPage() {
                 user.email?.split('@')[0] ||
                 'Unknown';
 
+            // Upload images to Supabase Storage
+            let imageUrls: string[] = [];
+            if (imageFiles.length > 0) {
+                try {
+                    imageUrls = await uploadImages(imageFiles, user.id);
+                } catch (uploadErr) {
+                    console.error('Image upload failed:', uploadErr);
+                    toast.error('Failed to upload images. Please try again.');
+                    return;
+                }
+            }
+
             // Retry loop to handle the rare case of a duplicate report code
             const MAX_RETRIES = 3;
             let lastError: { message: string } | null = null;
@@ -136,7 +152,7 @@ export default function CreateReportPage() {
                     category,
                     report_code: reportCode,
                     register_number: registerNumber,
-                    images: images, // base64 images for now
+                    images: imageUrls, // Public URLs from Supabase Storage
                     location: locationDescription.trim() || null,
                     latitude: selectedCoordinates?.lat || null,
                     longitude: selectedCoordinates?.lng || null,
@@ -334,7 +350,7 @@ export default function CreateReportPage() {
                         <div className="space-y-2">
                             <Label>Photos</Label>
                             <div className="grid grid-cols-3 gap-3">
-                                {images.map((img, idx) => (
+                                {imagePreviews.map((img, idx) => (
                                     <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
                                         <img src={img} alt="" className="w-full h-full object-cover" />
                                         <button
@@ -345,7 +361,7 @@ export default function CreateReportPage() {
                                         </button>
                                     </div>
                                 ))}
-                                {images.length < 4 && (
+                                {imagePreviews.length < 4 && (
                                     <label className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 transition-colors">
                                         <Camera className="w-6 h-6 text-muted-foreground" />
                                         <span className="text-xs text-muted-foreground">Add Photo</span>
@@ -410,9 +426,9 @@ export default function CreateReportPage() {
                         <Card>
                             <CardContent className="p-6">
                                 <div className="flex items-center gap-4 mb-4">
-                                    {images.length > 0 ? (
+                                    {imagePreviews.length > 0 ? (
                                         <img
-                                            src={images[0]}
+                                            src={imagePreviews[0]}
                                             alt={title}
                                             className="w-20 h-20 rounded-xl object-cover"
                                         />
