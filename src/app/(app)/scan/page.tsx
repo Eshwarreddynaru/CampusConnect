@@ -12,6 +12,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Check if running inside Median.co WebView
+function isMedianApp(): boolean {
+    if (typeof window === 'undefined') return false;
+    return !!(window as any).median || !!(window as any).gonative;
+}
+
 export default function ScanQRPage() {
     const router = useRouter();
     const [isScanning, setIsScanning] = useState(false);
@@ -21,18 +27,60 @@ export default function ScanQRPage() {
     const [manualCode, setManualCode] = useState('');
     const [showManualInput, setShowManualInput] = useState(false);
     const scannerRef = useRef<any>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
 
     const startScanner = async () => {
         setScanResult(null);
         setScanError(null);
+
+        // If running inside Median.co app, use native scanner
+        if (isMedianApp()) {
+            startMedianScanner();
+            return;
+        }
+
+        // Otherwise use html5-qrcode (browser)
+        startBrowserScanner();
+    };
+
+    // ==========================================
+    // Median.co Native Scanner
+    // ==========================================
+    const startMedianScanner = async () => {
+        try {
+            const median = (window as any).median;
+            if (!median?.barcode?.scan) {
+                setScanError('Native scanner not available. Please use manual code entry.');
+                setShowManualInput(true);
+                return;
+            }
+
+            const data = await median.barcode.scan();
+            
+            if (data.success && data.code) {
+                handleVerifyCode(data.code);
+            } else {
+                // User cancelled or error
+                if (data.error) {
+                    setScanError(data.error);
+                }
+                // Don't show error for user-cancelled scans
+            }
+        } catch (err: any) {
+            console.error('Median scanner error:', err);
+            setScanError('Scanner failed. Try entering the code manually.');
+            setShowManualInput(true);
+        }
+    };
+
+    // ==========================================
+    // Browser-based Scanner (html5-qrcode)
+    // ==========================================
+    const startBrowserScanner = async () => {
         setIsScanning(true);
 
         try {
-            // Dynamically import html5-qrcode to avoid SSR issues
             const { Html5Qrcode } = await import('html5-qrcode');
 
-            // Wait for the container to be in the DOM
             await new Promise(resolve => setTimeout(resolve, 100));
 
             if (!document.getElementById('qr-reader')) {
@@ -52,31 +100,27 @@ export default function ScanQRPage() {
                     aspectRatio: 1,
                 },
                 async (decodedText) => {
-                    // QR code detected — stop scanner and verify
                     try {
                         await scanner.stop();
-                    } catch (e) {
-                        // Scanner may already be stopped
-                    }
+                    } catch (e) { /* ignore */ }
                     scannerRef.current = null;
                     setIsScanning(false);
                     handleVerifyCode(decodedText);
                 },
-                (errorMessage) => {
-                    // QR code parsing failed — this is normal, just means no QR in frame
-                }
+                () => { /* QR not in frame - normal */ }
             );
         } catch (err: any) {
             console.error('Scanner error:', err);
             setIsScanning(false);
             
             if (err.toString().includes('NotAllowedError') || err.toString().includes('Permission')) {
-                setScanError('Camera access denied. Please allow camera access in your browser settings and try again.');
+                setScanError('Camera access denied. Please allow camera access or enter the code manually.');
             } else if (err.toString().includes('NotFoundError')) {
-                setScanError('No camera found. Please connect a camera or use the manual code entry below.');
+                setScanError('No camera found. Please enter the code manually.');
             } else {
-                setScanError(`Could not start camera: ${err.message || err}. Try entering the code manually below.`);
+                setScanError(`Could not start camera. Try entering the code manually.`);
             }
+            setShowManualInput(true);
         }
     };
 
@@ -84,9 +128,7 @@ export default function ScanQRPage() {
         if (scannerRef.current) {
             try {
                 await scannerRef.current.stop();
-            } catch (e) {
-                // Ignore
-            }
+            } catch (e) { /* ignore */ }
             scannerRef.current = null;
         }
         setIsScanning(false);
@@ -168,12 +210,11 @@ export default function ScanQRPage() {
             {!scanResult && (
                 <Card className="mb-6 overflow-hidden">
                     <CardContent className="p-0">
-                        {/* Camera scanner */}
+                        {/* Browser camera scanner (non-Median) */}
                         {isScanning ? (
                             <div className="relative">
                                 <div 
                                     id="qr-reader" 
-                                    ref={containerRef}
                                     className="w-full"
                                     style={{ minHeight: '350px' }}
                                 />
@@ -190,7 +231,6 @@ export default function ScanQRPage() {
                             </div>
                         ) : (
                             <div className="p-8 text-center">
-                                {/* Scanner placeholder */}
                                 <div className="w-24 h-24 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[#1a5c6b]/10 to-[#1a5c6b]/5 flex items-center justify-center">
                                     <Camera className="w-10 h-10 text-[#1a5c6b]/40" />
                                 </div>
@@ -214,7 +254,7 @@ export default function ScanQRPage() {
                                     size="lg"
                                 >
                                     <Camera className="w-5 h-5 mr-2" />
-                                    Open Camera & Scan
+                                    {isMedianApp() ? 'Open Scanner' : 'Open Camera & Scan'}
                                 </Button>
 
                                 <Button
@@ -396,7 +436,7 @@ export default function ScanQRPage() {
                                     <span className="text-xs font-bold text-[#1a5c6b]">1</span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                    The person who reported the item shows their report's QR code (from the report detail page)
+                                    The person who reported the item shows their report's QR code
                                 </p>
                             </div>
                             <div className="flex gap-3">
@@ -404,7 +444,7 @@ export default function ScanQRPage() {
                                     <span className="text-xs font-bold text-[#1a5c6b]">2</span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                    You scan the QR code using this scanner or enter the code manually
+                                    You scan the QR code or enter the code manually
                                 </p>
                             </div>
                             <div className="flex gap-3">
@@ -412,7 +452,7 @@ export default function ScanQRPage() {
                                     <span className="text-xs font-bold text-[#1a5c6b]">3</span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                    The item is automatically marked as "Returned via QR" — no further action needed!
+                                    The item is automatically marked as "Returned via QR"
                                 </p>
                             </div>
                         </div>
