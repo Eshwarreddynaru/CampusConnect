@@ -7,14 +7,15 @@ import {
     LayoutGrid,
     MapPin,
     PlusCircle,
+    Sparkles,
     HandHelping,
     User
 } from 'lucide-react';
 
 const navItems = [
     { href: '/feed', label: 'Feed', icon: LayoutGrid },
-    { href: '/map', label: 'Map', icon: MapPin },
     { href: '/create', label: 'Create', icon: PlusCircle },
+    { href: '/my-matches', label: 'Matches', icon: Sparkles },
     { href: '/my-claims', label: 'Claims', icon: HandHelping },
     { href: '/profile', label: 'Profile', icon: User },
 ];

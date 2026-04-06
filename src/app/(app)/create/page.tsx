@@ -152,26 +152,44 @@ export default function CreateReportPage() {
                     user_id: user.id,
                 };
 
-                const { error } = await supabase
+                const { data: createdReport, error } = await supabase
                     .from('reports')
-                    .insert(reportData);
+                    .insert(reportData)
+                    .select('id')
+                    .single();
 
-                if (!error) {
-                    // Success — break out of retry loop
+                if (!error && createdReport) {
+                    // Success — trigger matching via API
+                    try {
+                        const matchResponse = await fetch('/api/reports/match', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reportId: createdReport.id }),
+                        });
+                        const matchData = await matchResponse.json();
+                        if (matchData.matchesFound > 0) {
+                            console.log(`Found ${matchData.matchesFound} potential matches`);
+                        }
+                    } catch (matchErr) {
+                        // Matching failure shouldn't block report creation
+                        console.error('Matching error (non-blocking):', matchErr);
+                    }
                     lastError = null;
                     break;
                 }
 
-                // If the error is a duplicate key, retry with a new code
-                if (error.message?.includes('duplicate key') || error.code === '23505') {
-                    lastError = error;
-                    continue;
-                }
+                if (error) {
+                    // If the error is a duplicate key, retry with a new code
+                    if (error.message?.includes('duplicate key') || error.code === '23505') {
+                        lastError = error;
+                        continue;
+                    }
 
-                // For any other error, don't retry
-                console.error('Error creating report:', error);
-                toast.error(`Failed to create report: ${error.message}`);
-                return;
+                    // For any other error, don't retry
+                    console.error('Error creating report:', error);
+                    toast.error(`Failed to create report: ${error.message}`);
+                    return;
+                }
             }
 
             if (lastError) {

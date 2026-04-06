@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
 // Get matches for a specific report
@@ -6,10 +7,7 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const reportId = searchParams.get('reportId');
-
-        if (!reportId) {
-            return NextResponse.json({ error: 'Report ID required' }, { status: 400 });
-        }
+        const userId = searchParams.get('userId'); // Optional: get all matches for a user
 
         const supabase = await createClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -18,14 +16,10 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify user owns this report or is admin
-        const { data: report } = await supabase
-            .from('reports')
-            .select('user_id')
-            .eq('id', reportId)
-            .single();
+        const adminClient = createAdminClient();
 
-        const { data: profile } = await supabase
+        // Check if admin
+        const { data: profile } = await adminClient
             .from('profiles')
             .select('role')
             .eq('id', user.id)
@@ -33,12 +27,88 @@ export async function GET(request: Request) {
 
         const isAdmin = profile?.role === 'admin';
 
+        // If userId is provided, get ALL matches for that user
+        if (userId) {
+            // Only allow users to get their own matches, or admins
+            if (userId !== user.id && !isAdmin) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+
+            // Get all reports by this user
+            const { data: userReports } = await adminClient
+                .from('reports')
+                .select('id')
+                .eq('user_id', userId);
+
+            const userReportIds = (userReports || []).map(r => r.id);
+
+            if (userReportIds.length === 0) {
+                return NextResponse.json({ matches: [] });
+            }
+
+            // Get matches involving user's reports
+            const { data: matches, error } = await adminClient
+                .from('matches')
+                .select(`
+                    id,
+                    lost_report_id,
+                    found_report_id,
+                    match_score,
+                    status,
+                    created_at
+                `)
+                .or(
+                    userReportIds.map(id => `lost_report_id.eq.${id}`).join(',') + ',' +
+                    userReportIds.map(id => `found_report_id.eq.${id}`).join(',')
+                )
+                .order('match_score', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching user matches:', error);
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+
+            // Fetch full report data for each match
+            const allReportIds = new Set<string>();
+            (matches || []).forEach(m => {
+                allReportIds.add(m.lost_report_id);
+                allReportIds.add(m.found_report_id);
+            });
+
+            const { data: reportsList } = await adminClient
+                .from('reports')
+                .select('id, type, title, description, category, images, location, created_at, user_id, register_number')
+                .in('id', Array.from(allReportIds));
+
+            const reportsMap = new Map((reportsList || []).map(r => [r.id, r]));
+
+            const enrichedMatches = (matches || []).map(m => ({
+                ...m,
+                lost_report: reportsMap.get(m.lost_report_id) || null,
+                found_report: reportsMap.get(m.found_report_id) || null,
+            }));
+
+            return NextResponse.json({ matches: enrichedMatches });
+        }
+
+        // Original behavior: get matches for a specific report
+        if (!reportId) {
+            return NextResponse.json({ error: 'Report ID or User ID required' }, { status: 400 });
+        }
+
+        // Verify user owns this report or is admin
+        const { data: report } = await adminClient
+            .from('reports')
+            .select('user_id')
+            .eq('id', reportId)
+            .single();
+
         if (!report || (report.user_id !== user.id && !isAdmin)) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Get matches
-        const { data: matches, error } = await supabase
+        // Get matches for this specific report
+        const { data: matches, error } = await adminClient
             .from('matches')
             .select(`
                 id,
@@ -46,15 +116,7 @@ export async function GET(request: Request) {
                 found_report_id,
                 match_score,
                 status,
-                created_at,
-                lost_report:reports!matches_lost_report_id_fkey(
-                    id, type, title, description, category, images, location, 
-                    created_at, user_id, register_number
-                ),
-                found_report:reports!matches_found_report_id_fkey(
-                    id, type, title, description, category, images, location,
-                    created_at, user_id, register_number
-                )
+                created_at
             `)
             .or(`lost_report_id.eq.${reportId},found_report_id.eq.${reportId}`)
             .order('match_score', { ascending: false });
@@ -64,7 +126,27 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json({ matches: matches || [] });
+        // Fetch full report data for each match
+        const allReportIds = new Set<string>();
+        (matches || []).forEach(m => {
+            allReportIds.add(m.lost_report_id);
+            allReportIds.add(m.found_report_id);
+        });
+
+        const { data: reportsList } = await adminClient
+            .from('reports')
+            .select('id, type, title, description, category, images, location, created_at, user_id, register_number')
+            .in('id', Array.from(allReportIds));
+
+        const reportsMap = new Map((reportsList || []).map(r => [r.id, r]));
+
+        const enrichedMatches = (matches || []).map(m => ({
+            ...m,
+            lost_report: reportsMap.get(m.lost_report_id) || null,
+            found_report: reportsMap.get(m.found_report_id) || null,
+        }));
+
+        return NextResponse.json({ matches: enrichedMatches });
     } catch (error) {
         console.error('Matches API error:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -88,16 +170,12 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify user is involved in this match
-        const { data: match } = await supabase
+        const adminClient = createAdminClient();
+
+        // Get the match and verify user is involved
+        const { data: match } = await adminClient
             .from('matches')
-            .select(`
-                id,
-                lost_report_id,
-                found_report_id,
-                lost_report:reports!matches_lost_report_id_fkey(user_id),
-                found_report:reports!matches_found_report_id_fkey(user_id)
-            `)
+            .select('id, lost_report_id, found_report_id')
             .eq('id', matchId)
             .single();
 
@@ -105,9 +183,18 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ error: 'Match not found' }, { status: 404 });
         }
 
-        // Supabase types infer joined relations as arrays, but .single() returns objects at runtime
-        const lostReport = match.lost_report as unknown as { user_id: string } | null;
-        const foundReport = match.found_report as unknown as { user_id: string } | null;
+        // Get both reports to check ownership
+        const { data: lostReport } = await adminClient
+            .from('reports')
+            .select('user_id')
+            .eq('id', match.lost_report_id)
+            .single();
+
+        const { data: foundReport } = await adminClient
+            .from('reports')
+            .select('user_id')
+            .eq('id', match.found_report_id)
+            .single();
 
         const isInvolved = 
             lostReport?.user_id === user.id || 
@@ -118,9 +205,9 @@ export async function PATCH(request: Request) {
         }
 
         // Update match status
-        const { error } = await supabase
+        const { error } = await adminClient
             .from('matches')
-            .update({ status })
+            .update({ status, updated_at: new Date().toISOString() })
             .eq('id', matchId);
 
         if (error) {

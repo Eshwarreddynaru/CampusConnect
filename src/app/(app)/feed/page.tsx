@@ -35,6 +35,8 @@ interface Report {
     status: 'active' | 'claimed' | 'returned_qr' | 'returned_direct';
     created_at: string;
     user_id: string;
+    matched_with?: string | null;
+    match_score?: number | null;
 }
 
 type SortOption = 'newest' | 'oldest' | 'relevant';
@@ -177,19 +179,16 @@ export default function FeedPage() {
                 setCurrentUserId(user.id);
             }
 
-            // Fetch reports directly from Supabase (fallback to original method)
-            const { data: reportsData, error: reportsError } = await supabase
-                .from('reports')
-                .select('id, type, title, description, category, report_code, register_number, images, location, status, created_at, user_id')
-                .order('created_at', { ascending: false });
-
-            if (reportsError) {
-                console.error('Error fetching reports:', reportsError);
-                setFetchError(reportsError.message || 'Could not connect to the database.');
-                return;
+            // Fetch reports via API route which handles privacy filtering
+            const response = await fetch('/api/reports');
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to fetch reports');
             }
 
-            setReports(reportsData || []);
+            const data = await response.json();
+            setReports(data.reports || []);
             setFetchError(null);
         } catch (error) {
             console.error('Error:', error);
@@ -650,6 +649,23 @@ export default function FeedPage() {
                                             ))}
                                         </span>
                                     </div>
+                                )}
+                                {/* Privacy match indicator — shown for matched reports from other users */}
+                                {report.matched_with && report.user_id !== currentUserId && (
+                                    <Link href="/my-matches" className="flex items-center gap-1.5 mb-1.5 ml-1 group">
+                                        <Sparkles className="w-3 h-3 text-[#1a5c6b]" />
+                                        <span className="text-[11px] text-[#1a5c6b] font-medium group-hover:underline">
+                                            🔗 This report was matched with your item — View Match →
+                                        </span>
+                                    </Link>
+                                )}
+                                {report.matched_with && report.user_id === currentUserId && (
+                                    <Link href="/my-matches" className="flex items-center gap-1.5 mb-1.5 ml-1 group">
+                                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                                        <span className="text-[11px] text-emerald-600 font-medium group-hover:underline">
+                                            ✨ Match found! Tap to review →
+                                        </span>
+                                    </Link>
                                 )}
                                 <FeedCard
                                     id={report.id}

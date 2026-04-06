@@ -10,8 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MatchesList } from '@/components/matches/MatchesList';
 import { 
     ArrowLeft, MapPin, Calendar, User, Package, 
-    AlertCircle, Eye, Lock 
+    AlertCircle, Eye, Lock, QrCode, Scan
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { formatDistanceToNow } from 'date-fns';
 import { REPORT_CATEGORIES } from '@/lib/utils';
 
@@ -228,6 +229,51 @@ export default function ReportDetailPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* QR Code for return verification - only for owner */}
+            {isOwner && report.status !== 'returned_qr' && report.status !== 'returned_direct' && (
+                <Card>
+                    <CardContent className="p-6">
+                        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                            <QrCode className="w-4 h-4" />
+                            QR Code for Return Verification
+                        </h3>
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="p-4 bg-white rounded-xl border">
+                                <QRCodeSVG
+                                    value={report.report_code}
+                                    size={180}
+                                    level="H"
+                                    includeMargin
+                                />
+                            </div>
+                            <code className="text-sm font-mono bg-muted px-3 py-1.5 rounded-lg">
+                                {report.report_code}
+                            </code>
+                            <p className="text-xs text-muted-foreground text-center max-w-xs">
+                                Show this QR code to the person returning your item. They can scan it in the app to confirm the return.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Returned badge */}
+            {(report.status === 'returned_qr' || report.status === 'returned_direct') && (
+                <Card className="border-emerald-200 bg-emerald-50/50">
+                    <CardContent className="p-6 text-center">
+                        <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+                            <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        </div>
+                        <h3 className="font-semibold text-emerald-800 mb-1">Item Returned</h3>
+                        <p className="text-sm text-emerald-700">
+                            {report.status === 'returned_qr'
+                                ? 'This item was returned and verified via QR code scan.'
+                                : 'This item has been returned.'}
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Matches Section - Only visible to owner */}
             {isOwner && (
